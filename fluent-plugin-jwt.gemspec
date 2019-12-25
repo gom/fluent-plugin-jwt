@@ -24,5 +24,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake", "~> 12.0"
   spec.add_development_dependency "test-unit", "~> 3.0"
   spec.add_runtime_dependency "fluentd", [">= 0.14.10", "< 2"]
-  spec.add_runtime_dependency 'json-jwt', '>= 1.7.1'
+  spec.add_runtime_dependency 'json-jwt', '>= 1.11.0'
 end
