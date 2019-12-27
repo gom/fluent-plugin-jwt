@@ -7,7 +7,7 @@ module Fluent
     class JwtSignFilter < Fluent::Plugin::Filter
       include JwtPluginUtil
 
-      Fluent::Plugin.register_filter("jwt-sign", self)
+      Fluent::Plugin.register_filter("jwt_sign", self)
 
       config_param :private_key_file, :string, :default => "key.pem"
       config_param :key_algorithm, :enum, list: [:ecdsa, :rsa], default: :ecdsa
@@ -25,6 +25,10 @@ module Fluent
         begin
           until record.has_key?(@key)
             log.debug "@key: #{@key} doesn't exist in #{record}"
+            return record
+          end
+          until record[@key].is_a? (Hash)
+            log.debug "#{@key} is not a Hash: #{record[@key]}"
             return record
           end
 

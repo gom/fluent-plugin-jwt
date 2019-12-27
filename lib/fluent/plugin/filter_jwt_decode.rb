@@ -2,12 +2,15 @@ require "fluent/plugin/filter"
 require "fluent/plugin/jwt_plugin_util"
 require 'json/jwt'
 
+require "net/http"
+require "uri"
+
 module Fluent
   module Plugin
     class JwtDecodeFilter < Fluent::Plugin::Filter
       include JwtPluginUtil
 
-      Fluent::Plugin.register_filter("jwt-decode", self)
+      Fluent::Plugin.register_filter("jwt_decode", self)
 
       config_param :public_key_file, :string, :default => "pub.pem"
       config_param :key_algorithm, :enum, list: [:ecdsa, :rsa], default: :ecdsa
@@ -30,7 +33,7 @@ module Fluent
 
       def jwk_set(jku)
         begin
-          JSON::JWK::Set.new(JSON.parse(RestClient.get(jku)))
+          JSON::JWK::Set.new(JSON.parse(Net::HTTP.get(URI.parse(jku))))
         rescue JSON::ParserError => e
           log.error "JSON Web Key parse error", error: e.to_s
           log.debug_backtrace(e.backtrace)
@@ -50,7 +53,7 @@ module Fluent
 
       def filter(tag, time, record)
         unless record[@key]
-          log.warn "#{@key} doesn't included: #{record.to_s}"
+          log.info "#{@key} doesn't included: #{record.to_s}"
           return record
         end
 
@@ -58,7 +61,7 @@ module Fluent
         log.debug payload.to_s
         # TODO: use optional headers: jwk, jku
         
-        if @verify && !verify_signature(record, payload)
+        unless @verify.empty? || verify_signature(record, payload)
           log.error "ID Token Verification Failed! token_string: #{record[@key]} payload: #{payload}"
           return record
         end
@@ -70,31 +73,33 @@ module Fluent
       end
 
       def verify_signature(record, payload)
-        expected_iss = if @verify.iss
-          @verify.iss
-        elsif @verify.iss_key && record[@verify.iss_key]
-          record[@verify.iss_key]
-        end
+        @verify.any? do |verify|
+          expected_iss = if verify.iss
+            verify.iss
+          elsif verify.iss_key && record[verify.iss_key]
+            record[verify.iss_key]
+          end
 
-        expected_aud = if @verify.aud
-          @verify.aud
-        elsif @verify.aud_key && record[@verify.aud_key]
-          record[@verify.aud_key]
-        end
+          expected_aud = if verify.aud
+            verify.aud
+          elsif verify.aud_key && record[verify.aud_key]
+            record[verify.aud_key]
+          end
 
-        expected_nonce = if @verify.nonce
-          @verify.nonce
-        elsif @verify.nonce_key && record[@verify.nonce_key]
-          record[@verify.nonce_key]
-        end
+          expected_nonce = if verify.nonce
+            verify.nonce
+          elsif verify.nonce_key && record[verify.nonce_key]
+            record[verify.nonce_key]
+          end
 
-        (
-          payload[:iss] == expected_iss &&
-          payload[:aud] == expected_aud &&
-          payload[:sub].present? &&
-          Time.at(payload[:exp]) > Time.now &&
-          (!@verify.ignore_nonce && payload[:nonce] == expected_nonce)
-        )
+          (
+            payload[:iss] == expected_iss &&
+            payload[:aud] == expected_aud &&
+            payload[:sub].present? &&
+            Time.at(payload[:exp]) > Time.now &&
+            (!verify.ignore_nonce && payload[:nonce] == expected_nonce)
+          )
+        end
       end
     end
   end
