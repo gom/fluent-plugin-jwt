@@ -67,7 +67,7 @@ module Fluent
         end
 
         record[@target_key] = payload
-        record.remove(@key) if @remove_key
+        record.delete(@key) if @remove_key
 
         record
       end
